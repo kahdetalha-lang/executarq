@@ -4866,25 +4866,33 @@ async function _getAdminPass(){
 
 // ── Set admin password flow ──────────────────────────────────────
 function _setAdminPassFlow(){
-  _cancelAdminLock();
-  openModal(
-    'Criar senha Admin',
-    'Defina uma senha para proteger o acesso Admin.',
-    `<label class="m-lbl">Nova senha (mín. 4 caracteres)</label>
-     <input class="m-inp" id="new-admin-pass" type="password" placeholder="••••••••">
-     <label class="m-lbl" style="margin-top:4px">Confirmar senha</label>
-     <input class="m-inp" id="new-admin-pass2" type="password" placeholder="••••••••">`,
-    async ()=>{
-      const p1 = document.getElementById('new-admin-pass')?.value;
-      const p2 = document.getElementById('new-admin-pass2')?.value;
-      if(!p1 || p1.length < 4){ showToast('Senha deve ter ao menos 4 caracteres'); return; }
-      if(p1 !== p2){ showToast('As senhas não coincidem'); return; }
-      await _saveAdminPass(p1);
-      showToast('Senha Admin criada! ✓');
-      _applyRole('admin');
-      _hideProfileScreen();
-    }
-  );
+  // Fecha a tela de lock
+  const ol = document.getElementById('admin-lock-overlay');
+  if(ol) ol.style.display = 'none';
+  // Limpa cache de sessão
+  try{ sessionStorage.removeItem('executarq_adm_cache'); }catch(e){}
+  setTimeout(()=>{
+    openModal(
+      'Criar senha Admin',
+      'Defina uma senha para proteger o acesso Admin. Funcionará em qualquer dispositivo.',
+      `<label class="m-lbl">Nova senha (mín. 4 caracteres)</label>
+       <input class="m-inp" id="new-admin-pass" type="password" placeholder="••••••••">
+       <label class="m-lbl" style="margin-top:8px">Confirmar senha</label>
+       <input class="m-inp" id="new-admin-pass2" type="password" placeholder="••••••••">`,
+      async ()=>{
+        const p1 = document.getElementById('new-admin-pass')?.value;
+        const p2 = document.getElementById('new-admin-pass2')?.value;
+        if(!p1 || p1.length < 4){ showToast('Senha deve ter ao menos 4 caracteres'); return; }
+        if(p1 !== p2){ showToast('As senhas não coincidem'); return; }
+        await _saveAdminPass(p1);
+        try{ sessionStorage.removeItem('executarq_adm_cache'); }catch(e){}
+        showToast('Senha Admin criada! ✓');
+        _applyRole('admin');
+        _hideProfileScreen();
+      },
+      'Criar senha'
+    );
+  }, 150);
 }
 
 // ── Profile switch (from badge click) ───────────────────────────
