@@ -1900,7 +1900,7 @@ body.dark-mode .profile-user-badge{
     </div>
     <div style="margin-top:16px;font-size:11px;color:var(--ink3)">
       Ainda não tem uma senha admin? 
-      <button onclick="_setAdminPassFlow()" style="background:none;border:none;font-size:11px;color:var(--blue);cursor:pointer;font-family:inherit;text-decoration:underline">Criar agora</button>
+      <button onclick="event.stopPropagation();_criarSenhaAdmin()" style="background:none;border:none;font-size:11px;color:var(--blue);cursor:pointer;font-family:inherit;text-decoration:underline">Criar agora</button>
     </div>
   </div>
 </div>
@@ -4795,6 +4795,12 @@ async function _verifyAdminPass(){
   const err = document.getElementById('lock-err');
   const entered = inp?.value || '';
   const stored = await _getAdminPass();
+  if(!stored){
+    // Sem senha no banco — criar nova
+    document.getElementById('admin-lock-overlay').style.display = 'none';
+    _criarSenhaAdmin();
+    return;
+  }
   if(entered === stored){
     document.getElementById('admin-lock-overlay').style.display = 'none';
     _applyRole('admin');
@@ -4865,34 +4871,52 @@ async function _getAdminPass(){
 }
 
 // ── Set admin password flow ──────────────────────────────────────
-function _setAdminPassFlow(){
-  // Fecha a tela de lock
+function _setAdminPassFlow(){ _criarSenhaAdmin(); }
+
+// Nova função robusta para criar senha admin
+function _criarSenhaAdmin(){
+  // 1. Fecha tela de lock
   const ol = document.getElementById('admin-lock-overlay');
   if(ol) ol.style.display = 'none';
-  // Limpa cache de sessão
+  // 2. Limpa cache
   try{ sessionStorage.removeItem('executarq_adm_cache'); }catch(e){}
-  setTimeout(()=>{
-    openModal(
-      'Criar senha Admin',
-      'Defina uma senha para proteger o acesso Admin. Funcionará em qualquer dispositivo.',
-      `<label class="m-lbl">Nova senha (mín. 4 caracteres)</label>
-       <input class="m-inp" id="new-admin-pass" type="password" placeholder="••••••••">
-       <label class="m-lbl" style="margin-top:8px">Confirmar senha</label>
-       <input class="m-inp" id="new-admin-pass2" type="password" placeholder="••••••••">`,
-      async ()=>{
-        const p1 = document.getElementById('new-admin-pass')?.value;
-        const p2 = document.getElementById('new-admin-pass2')?.value;
-        if(!p1 || p1.length < 4){ showToast('Senha deve ter ao menos 4 caracteres'); return; }
-        if(p1 !== p2){ showToast('As senhas não coincidem'); return; }
-        await _saveAdminPass(p1);
-        try{ sessionStorage.removeItem('executarq_adm_cache'); }catch(e){}
-        showToast('Senha Admin criada! ✓');
-        _applyRole('admin');
-        _hideProfileScreen();
-      },
-      'Criar senha'
-    );
-  }, 150);
+  // 3. Cria modal inline sem depender do openModal
+  const existing = document.getElementById('_admin-create-modal');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = '_admin-create-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:28px;width:380px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+      <div style="font-family:var(--serif);font-size:20px;font-weight:300;color:var(--ink);margin-bottom:6px">Criar senha Admin</div>
+      <div style="font-size:13px;color:var(--ink3);margin-bottom:20px">Funcionará em qualquer dispositivo.</div>
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);display:block;margin-bottom:6px">Nova senha (mín. 4 caracteres)</label>
+      <input id="_adm-p1" type="password" placeholder="••••••••" style="width:100%;padding:10px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--ink);font-size:14px;font-family:var(--sans);margin-bottom:14px;outline:none">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);display:block;margin-bottom:6px">Confirmar senha</label>
+      <input id="_adm-p2" type="password" placeholder="••••••••" style="width:100%;padding:10px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--ink);font-size:14px;font-family:var(--sans);margin-bottom:20px;outline:none">
+      <div id="_adm-err" style="display:none;color:#e84040;font-size:12px;margin-bottom:12px;font-weight:600"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="document.getElementById('_admin-create-modal').remove()" style="padding:10px 20px;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--ink2);cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:600">Cancelar</button>
+        <button onclick="_confirmarCriacaoSenha()" style="padding:10px 20px;border:none;border-radius:8px;background:var(--ink);color:var(--lime);cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:700">Criar senha</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('_adm-p1')?.focus(), 100);
+}
+
+async function _confirmarCriacaoSenha(){
+  const p1 = document.getElementById('_adm-p1')?.value || '';
+  const p2 = document.getElementById('_adm-p2')?.value || '';
+  const err = document.getElementById('_adm-err');
+  if(p1.length < 4){ err.textContent='Senha deve ter ao menos 4 caracteres'; err.style.display='block'; return; }
+  if(p1 !== p2){ err.textContent='As senhas não coincidem'; err.style.display='block'; return; }
+  err.style.display='none';
+  await _saveAdminPass(p1);
+  try{ sessionStorage.removeItem('executarq_adm_cache'); }catch(e){}
+  document.getElementById('_admin-create-modal')?.remove();
+  showToast('Senha Admin criada! ✓');
+  _applyRole('admin');
+  _hideProfileScreen();
 }
 
 // ── Profile switch (from badge click) ───────────────────────────
