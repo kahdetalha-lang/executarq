@@ -4790,11 +4790,11 @@ function _cancelAdminLock(){
   const ol = document.getElementById('admin-lock-overlay');
   if(ol) ol.style.display = 'none';
 }
-function _verifyAdminPass(){
+async function _verifyAdminPass(){
   const inp = document.getElementById('admin-lock-pass');
   const err = document.getElementById('lock-err');
   const entered = inp?.value || '';
-  const stored = _getAdminPass();
+  const stored = await _getAdminPass();
   if(entered === stored){
     document.getElementById('admin-lock-overlay').style.display = 'none';
     _applyRole('admin');
@@ -4814,16 +4814,54 @@ function toggleLockPass(){
   if(icon) icon.className = show ? 'ti ti-eye-off' : 'ti ti-eye';
 }
 
-// ── Password storage (localStorage, obfuscated) ─────────────────
-function _saveAdminPass(pass){
-  try{ localStorage.setItem(ADMIN_PASS_KEY, btoa(encodeURIComponent(pass))); }catch(e){}
+// ── Password storage (Supabase) ──────────────────────────────────
+// A senha Admin fica salva no Supabase, vinculada à conta do usuário.
+// Funciona em qualquer dispositivo ou navegador.
+
+async function _saveAdminPass(pass){
+  if(!_currentUID) return;
+  // Salva hash simples no Supabase (perfil do usuário)
+  try{
+    await sbClient.from('profiles').upsert({
+      id: _currentUID,
+      admin_pass: btoa(encodeURIComponent(pass)),
+      updated_at: new Date().toISOString()
+    }, {onConflict:'id'});
+    // Guarda em cache na sessão para não buscar toda hora
+    try{ sessionStorage.setItem('executarq_adm_cache', btoa(encodeURIComponent(pass))); }catch(e){}
+  }catch(e){
+    // Fallback localStorage se Supabase falhar
+    try{ localStorage.setItem(ADMIN_PASS_KEY, btoa(encodeURIComponent(pass))); }catch(e){}
+  }
 }
-function _getAdminPass(){
+
+async function _getAdminPass(){
+  // 1. Tenta cache de sessão (mais rápido)
+  try{
+    const cached = sessionStorage.getItem('executarq_adm_cache');
+    if(cached) return decodeURIComponent(atob(cached));
+  }catch(e){}
+  // 2. Busca no Supabase
+  if(_currentUID){
+    try{
+      const {data} = await sbClient.from('profiles')
+        .select('admin_pass')
+        .eq('id', _currentUID)
+        .maybeSingle();
+      if(data?.admin_pass){
+        const pass = decodeURIComponent(atob(data.admin_pass));
+        // Guarda em cache
+        try{ sessionStorage.setItem('executarq_adm_cache', data.admin_pass); }catch(e){}
+        return pass;
+      }
+    }catch(e){}
+  }
+  // 3. Fallback localStorage (compatibilidade com versão anterior)
   try{
     const raw = localStorage.getItem(ADMIN_PASS_KEY);
-    if(!raw) return null;
-    return decodeURIComponent(atob(raw));
-  }catch(e){ return null; }
+    if(raw) return decodeURIComponent(atob(raw));
+  }catch(e){}
+  return null;
 }
 
 // ── Set admin password flow ──────────────────────────────────────
@@ -4836,12 +4874,12 @@ function _setAdminPassFlow(){
      <input class="m-inp" id="new-admin-pass" type="password" placeholder="••••••••">
      <label class="m-lbl" style="margin-top:4px">Confirmar senha</label>
      <input class="m-inp" id="new-admin-pass2" type="password" placeholder="••••••••">`,
-    ()=>{
+    async ()=>{
       const p1 = document.getElementById('new-admin-pass')?.value;
       const p2 = document.getElementById('new-admin-pass2')?.value;
       if(!p1 || p1.length < 4){ showToast('Senha deve ter ao menos 4 caracteres'); return; }
       if(p1 !== p2){ showToast('As senhas não coincidem'); return; }
-      _saveAdminPass(p1);
+      await _saveAdminPass(p1);
       showToast('Senha Admin criada! ✓');
       _applyRole('admin');
       _hideProfileScreen();
