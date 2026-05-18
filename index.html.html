@@ -4712,35 +4712,16 @@ function _hideProfileScreen(){
 }
 
 // ── Profile selection ────────────────────────────────────────────
-function _selectProfile(role){
+async function _selectProfile(role){
   if(role === 'admin'){
-    // Check if admin password is set
-    const storedPass = _getAdminPass();
+    const storedPass = await _getAdminPass();
     if(!storedPass){
-      // No password set yet — go straight in and prompt to set one
-      _applyRole('admin');
+      // Sem senha — abre modal para criar automaticamente
       _hideProfileScreen();
-      setTimeout(()=>{
-        openModal(
-          'Criar senha Admin',
-          'Defina uma senha para proteger o acesso Admin. Será solicitada sempre que alguém tentar acessar como administrador.',
-          `<label class="m-lbl">Nova senha (mín. 4 caracteres)</label>
-           <input class="m-inp" id="new-admin-pass" type="password" placeholder="••••••••">
-           <label class="m-lbl" style="margin-top:4px">Confirmar senha</label>
-           <input class="m-inp" id="new-admin-pass2" type="password" placeholder="••••••••">`,
-          ()=>{
-            const p1 = document.getElementById('new-admin-pass')?.value;
-            const p2 = document.getElementById('new-admin-pass2')?.value;
-            if(!p1 || p1.length < 4){ showToast('Senha deve ter ao menos 4 caracteres'); return; }
-            if(p1 !== p2){ showToast('As senhas não coincidem'); return; }
-            _saveAdminPass(p1);
-            showToast('Senha Admin criada! ✓');
-          }
-        );
-      }, 300);
+      _criarSenhaAdmin();
       return;
     }
-    // Password exists — show lock screen
+    // Senha existe — mostrar tela de bloqueio
     _showAdminLock();
   } else {
     _applyRole('equipe');
